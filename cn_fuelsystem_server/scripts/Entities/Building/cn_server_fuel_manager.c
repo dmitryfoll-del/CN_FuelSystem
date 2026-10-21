@@ -9,8 +9,8 @@ class cn_FuelConfigStructure
 	{
 		SPAWN_CHANCE_PERCENT = 65;
 		MIN_FUEL_LITRES = 20;
-		MAX_FUEL_LITRES = 250;
-		PUMP_FUEL_COEFFICIENT = 50.0; // Количество литров, добавляемое одной вышкой к каждой активной колонке
+		MAX_FUEL_LITRES = 250; // Используется и как начальный максимум, и как лимит вместимости АЗС
+		PUMP_FUEL_COEFFICIENT = 50.0;
 	}
 }
 
@@ -98,10 +98,16 @@ modded class Land_FuelStation_Feed
 		cn_ScanMapAndAddBonusFuel();
 	}
 
-	// Функция сканирования карты, подсчета вышек и начисления фиксированного бонуса на каждую активную АЗС
+	// Функция сканирования карты, подсчета вышек и распределения бонуса
 	static void cn_ScanMapAndAddBonusFuel()
 	{
 		if (cn_IsMapScannedForPumps || !cn_ServerDB || !cn_ServerSettings) return;
+
+		if (!cn_ServerDB.STATIONS_DATA || cn_ServerDB.STATIONS_DATA.Count() <= 0)
+		{
+			cn_IsMapScannedForPumps = true;
+			return;
+		}
 
 		// Базовый класснейм для поиска вышки (если менеджер конфигов недоступен)
 		string cn_pump_classname = "CN_OilPump"; 
@@ -119,32 +125,41 @@ modded class Land_FuelStation_Feed
 		int cn_pump_count = cn_found_pumps.Count();
 		if (cn_pump_count > 0)
 		{
-			// РАСЧЕТ: Сколько литров дает общее число вышек для одной заправки
-			int cn_fuel_per_station = Math.Round(cn_pump_count * cn_ServerSettings.PUMP_FUEL_COEFFICIENT);
+			// 1. Считаем ОБЩЕЕ количество добытого всеми вышками топлива
+			float cn_total_mined_fuel = cn_pump_count * cn_ServerSettings.PUMP_FUEL_COEFFICIENT;
+			
+			// Количество колонок, зарегистрированных на карте в файле базы данных
+			int cn_stations_count = cn_ServerDB.STATIONS_DATA.Count();
 
-			Print(string.Format("[CN_FuelSystem] Найдено вышек на карте: %1. Каждая активная АЗС получает бонус: +%2 л.", cn_pump_count, cn_fuel_per_station));
+			// 2. Делим общий объем топлива, подходящий для одной колонки
+			int cn_fuel_per_station = Math.Round(cn_total_mined_fuel / cn_stations_count);
 
-			// Дописываем результат расчета напрямую к остатку в КОЛОНКАХ
-			if (cn_ServerDB.STATIONS_DATA && cn_ServerDB.STATIONS_DATA.Count() > 0)
+			Print(string.Format("[CN_FuelSystem] Найдено вышек: %1. Всего добыто: %2 л. Доля одной АЗС: %3 л.", cn_pump_count, cn_total_mined_fuel, cn_fuel_per_station));
+
+			// Распределяем долю по колонкам с учетом индивидуального шанса SPAWN_CHANCE_PERCENT
+			for (int i = 0; i < cn_stations_count; i++)
 			{
-				for (int i = 0; i < cn_ServerDB.STATIONS_DATA.Count(); i++)
+				int cn_roll = Math.RandomInt(0, 100);
+				if (cn_roll < cn_ServerSettings.SPAWN_CHANCE_PERCENT)
 				{
-					// УЧИТЫВАЕМ SPAWN_CHANCE_PERCENT: начисляем бонус, только если колонка изначально активна (> 0 л.)
-					if (cn_ServerDB.STATIONS_DATA.Get(i).CURRENT_FUEL > 0)
+					// Шанс выпал — заливаем долю топлива в резервуар
+					cn_ServerDB.STATIONS_DATA.Get(i).CURRENT_FUEL += cn_fuel_per_station;
+					
+					// УЧИТЫВАЕМ ВАШУ ПЕРЕМЕННУЮ: Ограничиваем максимальную емкость резервуара значением MAX_FUEL_LITRES
+					if (cn_ServerDB.STATIONS_DATA.Get(i).CURRENT_FUEL > cn_ServerSettings.MAX_FUEL_LITRES)
 					{
-						cn_ServerDB.STATIONS_DATA.Get(i).CURRENT_FUEL += cn_fuel_per_station;
-						
-						// Ограничиваем максимальную емкость резервуара (не более 5000 литров)
-						if (cn_ServerDB.STATIONS_DATA.Get(i).CURRENT_FUEL > 5000)
-						{
-							cn_ServerDB.STATIONS_DATA.Get(i).CURRENT_FUEL = 5000;
-						}
+						cn_ServerDB.STATIONS_DATA.Get(i).CURRENT_FUEL = cn_ServerSettings.MAX_FUEL_LITRES;
 					}
 				}
-				
-				// Сохраняем обновленные остатки в файл CN_FuelData.json
-				cn_SaveServerDatabase();
+				else
+				{
+					// Шанс не выпал — доля топлива для этой колонки бесследно испаряется
+					Print(string.Format("[CN_FuelSystem] Доля топлива (%1 л.) для колонки %2 испарилась из-за шанса спавна.", cn_fuel_per_station, cn_ServerDB.STATIONS_DATA.Get(i).POSITION));
+				}
 			}
+			
+			// Фиксируем все изменения и сохранения в файл CN_FuelData.json
+			cn_SaveServerDatabase();
 		}
 
 		cn_IsMapScannedForPumps = true;
@@ -200,7 +215,7 @@ modded class Land_FuelStation_Feed
 				cn_SaveServerDatabase();
 
 				// Обезличенное логирование заправки в script.log
-				string cn_log_msg = string.Format("[CN_FuelSystem] Произошла заправка из充 колонки на координатах %1. Остаток топлива: %2 л.", cn_current_pos, cn_station_data.CURRENT_FUEL);
+				string cn_log_msg = string.Format("[CN_FuelSystem] Произошла заправка из колонки на координатах %1. Остаток топлива: %2 л.", cn_current_pos, cn_station_data.CURRENT_FUEL);
 				Print(cn_log_msg);
 			}
 		}
