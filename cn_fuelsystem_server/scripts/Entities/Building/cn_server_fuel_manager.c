@@ -34,7 +34,7 @@ modded class Land_FuelStation_Feed
 
 		// Установка кастомного пути: profiles/ColdNight_SRV_Data/FuelSystem
 		string cn_dir = "$profile:ColdNight_SRV_Data\\FuelSystem";
-		string cn_file = cn_dir + "\\CN_Config.json";
+		string cn_file = cn_dir + "\\CN_FuelFeedConfig.json";
 
 		// Проверяем и создаем всю вложенную структуру папок, если она отсутствует
 		if (!FileExist(cn_dir))
