@@ -1,6 +1,6 @@
 class CfgPatches
 {
-	class cn_fuelsystem_code
+	class CN_FuelSystem_code
 	{
 		units[]={};
 		weapons[]={};
@@ -11,14 +11,14 @@ class CfgPatches
 
 class CfgMods
 {
-	class cn_fuelsystem_code
+	class CN_FuelSystem_code
 	{
 		type = "mod";
 		dependencies[] = {"World"};
 		class World
 		{
 			value = "";
-			files[] = {"cn_fuelsystem_code/4_World"};
+			files[] = {"CN_FuelSystem_code/scripts/4_World"};
 		};
 	};
 };
