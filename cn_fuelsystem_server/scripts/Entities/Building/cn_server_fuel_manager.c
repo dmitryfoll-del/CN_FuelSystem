@@ -3,18 +3,21 @@ class cn_FuelConfigStructure
 	int SPAWN_CHANCE_PERCENT;
 	int MIN_FUEL_LITRES;
 	int MAX_FUEL_LITRES;
+	float PUMP_FUEL_COEFFICIENT;
 
 	void cn_FuelConfigStructure()
 	{
 		SPAWN_CHANCE_PERCENT = 65;
 		MIN_FUEL_LITRES = 20;
 		MAX_FUEL_LITRES = 250;
+		PUMP_FUEL_COEFFICIENT = 50.0; // Количество литров, добавляемое одной вышкой к каждой активной колонке
 	}
 }
 
+// Класс данных для сохранения состояния одной конкретной АЗС
 class cn_FuelStationData
 {
-	string POSITION;
+	string POSITION; // Уникальный строковый ID колонки по ее координатам
 	int CURRENT_FUEL;
 
 	void cn_FuelStationData(string pos, int fuel)
@@ -24,6 +27,7 @@ class cn_FuelStationData
 	}
 }
 
+// Класс базы данных для хранения всех колонок на карте
 class cn_FuelServerDatabase
 {
 	ref array<ref cn_FuelStationData> STATIONS_DATA;
@@ -39,10 +43,11 @@ modded class Land_FuelStation_Feed
 	private static ref cn_FuelConfigStructure cn_ServerSettings;
 	private static ref cn_FuelServerDatabase cn_ServerDB;
 	private static bool cn_IsSystemInitialized = false;
+	private static bool cn_IsMapScannedForPumps = false;
 	
 	private static string cn_ConfigDir = "$profile:ColdNight_SRV_Data\\FuelSystem";
-	private static string cn_ConfigFile = cn_ConfigDir + "\\CN_FuelFeedConfig.json";
-	private static string cn_DataFile = cn_ConfigDir + "\\CN_FuelData.json";
+	private static string cn_ConfigFile = cn_ConfigDir + "\\CN_FuelFeedConfig.json"; 
+	private static string cn_DataFile = cn_ConfigDir + "\\CN_FuelData.json";       
 
 	override void EEInit()
 	{
@@ -55,6 +60,7 @@ modded class Land_FuelStation_Feed
 		}
 	}
 
+	// Инициализация папок, чтение конфига настроек и базы данных остатков
 	static void cn_InitializeFuelSystem()
 	{
 		if (cn_IsSystemInitialized) return;
@@ -64,6 +70,7 @@ modded class Land_FuelStation_Feed
 			MakeDirectory(cn_ConfigDir);
 		}
 
+		// Загрузка или создание файла конфигурации CN_FuelFeedConfig.json
 		cn_ServerSettings = new cn_FuelConfigStructure();
 		if (FileExist(cn_ConfigFile))
 		{
@@ -74,6 +81,7 @@ modded class Land_FuelStation_Feed
 			JsonFileLoader<cn_FuelConfigStructure>.JsonSaveFile(cn_ConfigFile, cn_ServerSettings);
 		}
 
+		// Загрузка или создание файла базы данных остатков CN_FuelData.json
 		cn_ServerDB = new cn_FuelServerDatabase();
 		if (FileExist(cn_DataFile))
 		{
@@ -85,8 +93,64 @@ modded class Land_FuelStation_Feed
 		}
 
 		cn_IsSystemInitialized = true;
+
+		// Запускаем сканирование карты на наличие построенных вышек из CN_MiningMachines
+		cn_ScanMapAndAddBonusFuel();
 	}
 
+	// Функция сканирования карты, подсчета вышек и начисления фиксированного бонуса на каждую активную АЗС
+	static void cn_ScanMapAndAddBonusFuel()
+	{
+		if (cn_IsMapScannedForPumps || !cn_ServerDB || !cn_ServerSettings) return;
+
+		// Базовый класснейм для поиска вышки (если менеджер конфигов недоступен)
+		string cn_pump_classname = "CN_OilPump"; 
+		
+		// Интеграция с вашим менеджером конфигурации из мода CN_MiningMachines
+		if (Class.CastTo(cn_pump_classname, "CN_MachineConfigManager") && CN_MachineConfigManager.GetOptions())
+		{
+			cn_pump_classname = CN_MachineConfigManager.GetOptions().GetOilPumpClassname(); 
+		}
+
+		// Считаем количество выстроенных игроками вышек в мире
+		array<Object> cn_found_pumps = new array<Object>;
+		GetGame().GetObjectsOfName(cn_pump_classname, cn_found_pumps);
+
+		int cn_pump_count = cn_found_pumps.Count();
+		if (cn_pump_count > 0)
+		{
+			// РАСЧЕТ: Сколько литров дает общее число вышек для одной заправки
+			int cn_fuel_per_station = Math.Round(cn_pump_count * cn_ServerSettings.PUMP_FUEL_COEFFICIENT);
+
+			Print(string.Format("[CN_FuelSystem] Найдено вышек на карте: %1. Каждая активная АЗС получает бонус: +%2 л.", cn_pump_count, cn_fuel_per_station));
+
+			// Дописываем результат расчета напрямую к остатку в КОЛОНКАХ
+			if (cn_ServerDB.STATIONS_DATA && cn_ServerDB.STATIONS_DATA.Count() > 0)
+			{
+				for (int i = 0; i < cn_ServerDB.STATIONS_DATA.Count(); i++)
+				{
+					// УЧИТЫВАЕМ SPAWN_CHANCE_PERCENT: начисляем бонус, только если колонка изначально активна (> 0 л.)
+					if (cn_ServerDB.STATIONS_DATA.Get(i).CURRENT_FUEL > 0)
+					{
+						cn_ServerDB.STATIONS_DATA.Get(i).CURRENT_FUEL += cn_fuel_per_station;
+						
+						// Ограничиваем максимальную емкость резервуара (не более 5000 литров)
+						if (cn_ServerDB.STATIONS_DATA.Get(i).CURRENT_FUEL > 5000)
+						{
+							cn_ServerDB.STATIONS_DATA.Get(i).CURRENT_FUEL = 5000;
+						}
+					}
+				}
+				
+				// Сохраняем обновленные остатки в файл CN_FuelData.json
+				cn_SaveServerDatabase();
+			}
+		}
+
+		cn_IsMapScannedForPumps = true;
+	}
+
+	// Контроль топлива при инициализации объекта в мире
 	void cn_ControlFuelOnSpawn()
 	{
 		if (!cn_ServerSettings || !cn_ServerDB) return;
@@ -96,10 +160,12 @@ modded class Land_FuelStation_Feed
 
 		if (cn_saved_station)
 		{
+			// Если колонка найдена в базе данных, выдаем ей строго сохраненное количество литров
 			cn_SetServerFuel(cn_saved_station.CURRENT_FUEL);
 		}
 		else
 		{
+			// Если колонки нет в базе данных (первый запуск мода), рассчитываем рандом из конфига
 			int cn_initial_fuel = 0;
 			int cn_roll = Math.RandomInt(0, 100);
 			
@@ -108,6 +174,7 @@ modded class Land_FuelStation_Feed
 				cn_initial_fuel = Math.RandomIntIncluded(cn_ServerSettings.MIN_FUEL_LITRES, cn_ServerSettings.MAX_FUEL_LITRES);
 			}
 
+			// Регистрируем новую колонку
 			cn_FuelStationData cn_new_station = new cn_FuelStationData(cn_current_pos, cn_initial_fuel);
 			cn_ServerDB.STATIONS_DATA.Insert(cn_new_station);
 			
@@ -116,7 +183,7 @@ modded class Land_FuelStation_Feed
 		}
 	}
 
-	// Перехват расхода топлива и вывод обезличенного лога
+	// Перехват расхода топлива для динамического сохранения изменений на диск
 	override void DepleteFuel(float amount)
 	{
 		super.DepleteFuel(amount);
@@ -128,16 +195,18 @@ modded class Land_FuelStation_Feed
 
 			if (cn_station_data)
 			{
+				// Обновляем текущее значение на основе cn_GetServerFuel() из клиент-серверного аддона
 				cn_station_data.CURRENT_FUEL = cn_GetServerFuel();
 				cn_SaveServerDatabase();
 
-				// Обезличенное логирование заправки
-				string cn_log_msg = string.Format("[CN_FuelSystem] Произошла заправка из колонки на координатах %1. Остаток топлива: %2 л.", cn_current_pos, cn_station_data.CURRENT_FUEL);
+				// Обезличенное логирование заправки в script.log
+				string cn_log_msg = string.Format("[CN_FuelSystem] Произошла заправка из充 колонки на координатах %1. Остаток топлива: %2 л.", cn_current_pos, cn_station_data.CURRENT_FUEL);
 				Print(cn_log_msg);
 			}
 		}
 	}
 
+	// Поиск объекта в базе данных по координатам
 	static cn_FuelStationData cn_FindStationData(string cn_pos_target)
 	{
 		if (!cn_ServerDB || !cn_ServerDB.STATIONS_DATA) return null;
@@ -152,6 +221,7 @@ modded class Land_FuelStation_Feed
 		return null;
 	}
 
+	// Безопасное сохранение базы данных на диск
 	static void cn_SaveServerDatabase()
 	{
 		if (cn_IsSystemInitialized && cn_ServerDB)
