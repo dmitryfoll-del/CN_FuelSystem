@@ -12,10 +12,9 @@ class cn_FuelConfigStructure
 	}
 }
 
-// Класс данных для сохранения состояния одной конкретной АЗС
 class cn_FuelStationData
 {
-	string POSITION; // Уникальный строковый ID колонки по ее координатам
+	string POSITION;
 	int CURRENT_FUEL;
 
 	void cn_FuelStationData(string pos, int fuel)
@@ -25,7 +24,6 @@ class cn_FuelStationData
 	}
 }
 
-// Класс базы данных для хранения всех колонок на карте
 class cn_FuelServerDatabase
 {
 	ref array<ref cn_FuelStationData> STATIONS_DATA;
@@ -43,8 +41,8 @@ modded class Land_FuelStation_Feed
 	private static bool cn_IsSystemInitialized = false;
 	
 	private static string cn_ConfigDir = "$profile:ColdNight_SRV_Data\\FuelSystem";
-	private static string cn_ConfigFile = cn_ConfigDir + "\\CN_FuelFeedConfig.json"; // Имя вашего конфига
-	private static string cn_DataFile = cn_ConfigDir + "\\CN_FuelData.json";       // Имя файла сохранения остатков
+	private static string cn_ConfigFile = cn_ConfigDir + "\\CN_FuelFeedConfig.json";
+	private static string cn_DataFile = cn_ConfigDir + "\\CN_FuelData.json";
 
 	override void EEInit()
 	{
@@ -57,7 +55,6 @@ modded class Land_FuelStation_Feed
 		}
 	}
 
-	// Инициализация папок, чтение конфига настроек и базы данных остатков
 	static void cn_InitializeFuelSystem()
 	{
 		if (cn_IsSystemInitialized) return;
@@ -67,7 +64,6 @@ modded class Land_FuelStation_Feed
 			MakeDirectory(cn_ConfigDir);
 		}
 
-		// Загрузка файла конфигурации CN_FuelFeedConfig.json
 		cn_ServerSettings = new cn_FuelConfigStructure();
 		if (FileExist(cn_ConfigFile))
 		{
@@ -78,7 +74,6 @@ modded class Land_FuelStation_Feed
 			JsonFileLoader<cn_FuelConfigStructure>.JsonSaveFile(cn_ConfigFile, cn_ServerSettings);
 		}
 
-		// Загрузка или создание файла базы данных остатков CN_FuelData.json
 		cn_ServerDB = new cn_FuelServerDatabase();
 		if (FileExist(cn_DataFile))
 		{
@@ -92,7 +87,6 @@ modded class Land_FuelStation_Feed
 		cn_IsSystemInitialized = true;
 	}
 
-	// Контроль топлива при инициализации объекта в мире
 	void cn_ControlFuelOnSpawn()
 	{
 		if (!cn_ServerSettings || !cn_ServerDB) return;
@@ -102,12 +96,10 @@ modded class Land_FuelStation_Feed
 
 		if (cn_saved_station)
 		{
-			// Если колонка найдена в базе данных, возвращаем ей строго сохраненное количество литров
 			cn_SetServerFuel(cn_saved_station.CURRENT_FUEL);
 		}
 		else
 		{
-			// Если колонки нет в базе данных (первый запуск мода), рассчитываем рандом из конфига
 			int cn_initial_fuel = 0;
 			int cn_roll = Math.RandomInt(0, 100);
 			
@@ -116,7 +108,6 @@ modded class Land_FuelStation_Feed
 				cn_initial_fuel = Math.RandomIntIncluded(cn_ServerSettings.MIN_FUEL_LITRES, cn_ServerSettings.MAX_FUEL_LITRES);
 			}
 
-			// Регистрируем новую колонку
 			cn_FuelStationData cn_new_station = new cn_FuelStationData(cn_current_pos, cn_initial_fuel);
 			cn_ServerDB.STATIONS_DATA.Insert(cn_new_station);
 			
@@ -125,7 +116,7 @@ modded class Land_FuelStation_Feed
 		}
 	}
 
-	// Перехват расхода топлива для динамического сохранения изменений на диск
+	// Перехват расхода топлива и вывод обезличенного лога
 	override void DepleteFuel(float amount)
 	{
 		super.DepleteFuel(amount);
@@ -137,14 +128,16 @@ modded class Land_FuelStation_Feed
 
 			if (cn_station_data)
 			{
-				// Обновляем текущее значение на основе cn_GetServerFuel() из клиент-серверного аддона
 				cn_station_data.CURRENT_FUEL = cn_GetServerFuel();
 				cn_SaveServerDatabase();
+
+				// Обезличенное логирование заправки
+				string cn_log_msg = string.Format("[CN_FuelSystem] Произошла заправка из колонки на координатах %1. Остаток топлива: %2 л.", cn_current_pos, cn_station_data.CURRENT_FUEL);
+				Print(cn_log_msg);
 			}
 		}
 	}
 
-	// Поиск объекта в базе данных по координатам
 	static cn_FuelStationData cn_FindStationData(string cn_pos_target)
 	{
 		if (!cn_ServerDB || !cn_ServerDB.STATIONS_DATA) return null;
@@ -159,7 +152,6 @@ modded class Land_FuelStation_Feed
 		return null;
 	}
 
-	// Безопасное сохранение базы данных на диск
 	static void cn_SaveServerDatabase()
 	{
 		if (cn_IsSystemInitialized && cn_ServerDB)
