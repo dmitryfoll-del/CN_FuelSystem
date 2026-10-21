@@ -1,15 +1,12 @@
 modded class Land_FuelStation_Feed
 {
 	protected int cn_CurrentFuel = -1;
-	protected bool cn_IsFuelDataReceived = false;
 
 	void Land_FuelStation_Feed()
 	{
-		// Регистрируем синхронизацию переменной (макс 5000 литров)
 		RegisterNetSyncVariableInt("cn_CurrentFuel", 0, 5000);
 	}
 
-	// Метод для изменения топлива (вызывается на сервере)
 	void cn_SetServerFuel(int cn_amount)
 	{
 		if (GetGame().IsServer())
@@ -20,7 +17,6 @@ modded class Land_FuelStation_Feed
 		}
 	}
 
-	// Метод получения текущего остатка (доступен везде)
 	int cn_GetServerFuel()
 	{
 		return cn_CurrentFuel;
