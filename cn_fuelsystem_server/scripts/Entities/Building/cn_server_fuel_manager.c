@@ -1,4 +1,3 @@
-// Класс структуры данных JSON конфигурации
 class cn_FuelConfigStructure
 {
 	int SPAWN_CHANCE_PERCENT;
@@ -7,14 +6,12 @@ class cn_FuelConfigStructure
 
 	void cn_FuelConfigStructure()
 	{
-		// Дефолтные настройки, если файла нет
 		SPAWN_CHANCE_PERCENT = 65;
 		MIN_FUEL_LITRES = 20;
 		MAX_FUEL_LITRES = 250;
 	}
 }
 
-// Модификация инициализации колонок на сервере
 modded class Land_FuelStation_Feed
 {
 	private static ref cn_FuelConfigStructure cn_ServerSettings;
@@ -31,14 +28,15 @@ modded class Land_FuelStation_Feed
 		}
 	}
 
-	// Функция загрузки JSON конфигурации с диска
 	static void cn_LoadServerConfig()
 	{
 		if (cn_IsConfigLoaded) return;
 
-		string cn_dir = "$profile:CN_FuelSystem";
+		// Установка кастомного пути: profiles/ColdNight_SRV_Data/FuelSystem
+		string cn_dir = "$profile:ColdNight_SRV_Data\\FuelSystem";
 		string cn_file = cn_dir + "\\CN_Config.json";
 
+		// Проверяем и создаем всю вложенную структуру папок, если она отсутствует
 		if (!FileExist(cn_dir))
 		{
 			MakeDirectory(cn_dir);
@@ -58,7 +56,6 @@ modded class Land_FuelStation_Feed
 		cn_IsConfigLoaded = true;
 	}
 
-	// Расчет шансов и объема топлива по правилам из JSON
 	void cn_ApplyRandomFuel()
 	{
 		if (!cn_ServerSettings) return;
