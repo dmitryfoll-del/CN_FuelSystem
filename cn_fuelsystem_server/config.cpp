@@ -5,7 +5,7 @@ class CfgPatches
 		units[]={};
 		weapons[]={};
 		requiredVersion=0.1;
-		requiredAddons[]={"cn_fuelsystem_code"};
+		requiredAddons[]={"CN_FuelSystem_code"};
 	};
 };
 
@@ -18,7 +18,7 @@ class CfgMods
 		class World
 		{
 			value = "";
-			files[] = {"cn_fuelsystem_server/4_World"};
+			files[] = {"cn_fuelsystem_server/scripts/4_World"};
 		};
 	};
 };
