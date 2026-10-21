@@ -4,6 +4,7 @@ modded class Land_FuelStation_Feed
 
 	void Land_FuelStation_Feed()
 	{
+		// Синхронизируем переменную литров (макс 5000 литров)
 		RegisterNetSyncVariableInt("cn_CurrentFuel", 0, 5000);
 	}
 
@@ -26,13 +27,15 @@ modded class Land_FuelStation_Feed
 	{
 		if (GetGame().IsServer())
 		{
-			cn_CurrentFuel -= Math.Round(amount);
+			// Ванильный amount приходит в миллилитрах. Переводим в литры.
+			float cn_litres_consumed = amount / 1000.0;
+
+			cn_CurrentFuel -= Math.Round(cn_litres_consumed);
 			if (cn_CurrentFuel < 0) cn_CurrentFuel = 0;
 			
 			SetFuelAmount(cn_CurrentFuel);
 			SetSynchDirty();
 		}
-		super.DepleteFuel(amount);
 	}
 
 	override int GetLiquidSourceType()
